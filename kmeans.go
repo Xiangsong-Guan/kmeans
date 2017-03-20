@@ -5,69 +5,51 @@ import (
 	"math/rand"
 )
 
-// Observation: Data Abstraction for an N-dimensional
+// Observation Data Abstraction for an N-dimensional
 // observation
-type Observation []float64
+type Observation map[string]float64
 
-// Abstracts the Observation with a cluster number
+// ClusteredObservation Abstracts the Observation with a cluster number
 // Update and computeation becomes more efficient
 type ClusteredObservation struct {
 	ClusterNumber int
 	Observation
 }
 
-// Distance Function: To compute the distanfe between observations
-type DistanceFunction func(first, second []float64) (float64, error)
+// DistanceFunction To compute the distanfe between observations
+type DistanceFunction func(first, second Observation) (float64, error)
 
-/*
-func (observation Observation) Sqd(otherObservation Observation) (ssq float64) {
-	for ii, jj := range observation {
-		d := jj - otherObservation[ii]
-		ssq += d * d
+func (observation Observation) magnitude() float64 {
+	total := 0.0
+
+	for _, v := range observation {
+		total = total + math.Pow(v, 2)
 	}
-	return ssq
+
+	return math.Sqrt(total)
 }
-*/
 
 // Summation of two vectors
-func (observation Observation) Add(otherObservation Observation) {
+func (observation Observation) add(otherObservation Observation) {
 	for ii, jj := range otherObservation {
+		_, ok := observation[ii]
+		if !ok {
+			observation[ii] = jj
+		}
 		observation[ii] += jj
 	}
 }
 
-// Multiplication of a vector with a scalar
-func (observation Observation) Mul(scalar float64) {
+// multiplication of a vector with a scalar
+func (observation Observation) mul(scalar float64) {
 	for ii := range observation {
 		observation[ii] *= scalar
 	}
 }
 
-// Dot Product of Two vectors
-func (observation Observation) InnerProduct(otherObservation Observation) {
-	for ii := range observation {
-		observation[ii] *= otherObservation[ii]
-	}
-}
-
-// Outer Product of two arrays
-// TODO: Need to be tested
-func (observation Observation) OuterProduct(otherObservation Observation) [][]float64 {
-	result := make([][]float64, len(observation))
-	for ii := range result {
-		result[ii] = make([]float64, len(otherObservation))
-	}
-	for ii := range result {
-		for jj := range result[ii] {
-			result[ii][jj] = observation[ii] * otherObservation[jj]
-		}
-	}
-	return result
-}
-
-// Find the closest observation and return the distance
+// Near Find the closest observation and return the distance
 // Index of observation, distance
-func near(p ClusteredObservation, mean []Observation, distanceFunction DistanceFunction) (int, float64) {
+func Near(p ClusteredObservation, mean []Observation, distanceFunction DistanceFunction) (int, float64) {
 	indexOfCluster := 0
 	minSquaredDistance, _ := distanceFunction(p.Observation, mean[0])
 	for i := 1; i < len(mean); i++ {
@@ -88,7 +70,7 @@ func seed(data []ClusteredObservation, k int, distanceFunction DistanceFunction)
 	for ii := 1; ii < k; ii++ {
 		var sum float64
 		for jj, p := range data {
-			_, dMin := near(p, s[:ii], distanceFunction)
+			_, dMin := Near(p, s[:ii], distanceFunction)
 			d2[jj] = dMin * dMin
 			sum += d2[jj]
 		}
@@ -103,10 +85,10 @@ func seed(data []ClusteredObservation, k int, distanceFunction DistanceFunction)
 }
 
 // K-Means Algorithm
-func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction DistanceFunction, threshold int) ([]ClusteredObservation, error) {
+func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction DistanceFunction, threshold int) []ClusteredObservation {
 	counter := 0
 	for ii, jj := range data {
-		closestCluster, _ := near(jj, mean, distanceFunction)
+		closestCluster, _ := Near(jj, mean, distanceFunction)
 		data[ii].ClusterNumber = closestCluster
 	}
 	mLen := make([]int, len(mean))
@@ -116,39 +98,37 @@ func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction Di
 			mLen[ii] = 0
 		}
 		for _, p := range data {
-			mean[p.ClusterNumber].Add(p.Observation)
+			mean[p.ClusterNumber].add(p.Observation)
 			mLen[p.ClusterNumber]++
 		}
 		for ii := range mean {
-			mean[ii].Mul(1 / float64(mLen[ii]))
+			mean[ii].mul(1 / float64(mLen[ii]))
 		}
 		var changes int
 		for ii, p := range data {
-			if closestCluster, _ := near(p, mean, distanceFunction); closestCluster != p.ClusterNumber {
+			if closestCluster, _ := Near(p, mean, distanceFunction); closestCluster != p.ClusterNumber {
 				changes++
 				data[ii].ClusterNumber = closestCluster
 			}
 		}
 		counter++
 		if changes == 0 || counter > threshold {
-			return data, nil
+			return data
 		}
 	}
-	return data, nil
 }
 
-// K-Means Algorithm with smart seeds
-// as known as K-Means ++
-func Kmeans(rawData [][]float64, k int, distanceFunction DistanceFunction, threshold int) ([]int, error) {
+// Kmeans Algorithm with smart seeds as known as K-Means ++
+func Kmeans(rawData []Observation, k int, distanceFunction DistanceFunction, threshold int) ([]int, []ClusteredObservation) {
 	data := make([]ClusteredObservation, len(rawData))
 	for ii, jj := range rawData {
 		data[ii].Observation = jj
 	}
 	seeds := seed(data, k, distanceFunction)
-	clusteredData, err := kmeans(data, seeds, distanceFunction, threshold)
+	clusteredData := kmeans(data, seeds, distanceFunction, threshold)
 	labels := make([]int, len(clusteredData))
 	for ii, jj := range clusteredData {
 		labels[ii] = jj.ClusterNumber
 	}
-	return labels, err
+	return labels, clusteredData
 }
