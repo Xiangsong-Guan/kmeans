@@ -5,6 +5,8 @@ import (
 	"math/rand"
 
 	"bishe/go/util"
+	"fmt"
+	"sync"
 )
 
 // Observation Data Abstraction for an N-dimensional
@@ -82,33 +84,70 @@ func seed(data []ClusteredObservation, k int, distanceFunction DistanceFunction)
 
 // K-Means Algorithm
 func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction DistanceFunction, threshold int) ([]ClusteredObservation, []Observation) {
+	progressChartCnt := 0
+	progressChartStp := threshold / 50
 	counter := 0
 	for ii, jj := range data {
 		closestCluster, _ := Near(jj, mean, distanceFunction)
 		data[ii].ClusterNumber = closestCluster
 	}
 	mLen := make([]int, len(mean))
+
+	//muti-thread init
+	workers := util.Config.Workers
+	tasksNum := len(data) / (workers - 1)
+	last := len(data) % (workers - 1)
+	meanLockers := make([]sync.Mutex, len(mean))
+	done := make(chan bool, workers)
+
 	for {
 		for ii := range mean {
 			mean[ii] = make(Observation)
 			mLen[ii] = 0
 		}
-		for _, p := range data {
-			mean[p.ClusterNumber].add(p.Observation)
-			mLen[p.ClusterNumber]++
+
+		//muti-thread 分派任务1
+		go kmeansWorker1(data[0:last], mean, mLen, meanLockers, done)
+		for i := 0; i < workers-1; i++ {
+			go kmeansWorker1(data[last+i*tasksNum:last+(i+1)*tasksNum], mean, mLen, meanLockers, done)
 		}
+		for i := workers; i > 0; {
+			<-done
+			i--
+		}
+		//for _, p := range data {
+		//  mean[p.ClusterNumber].add(p.Observation)
+		//	mLen[p.ClusterNumber]++
+		//}
+
 		for ii := range mean {
 			mean[ii].mul(1 / float64(mLen[ii]))
 		}
-		changes := 0
-		for ii, p := range data {
-			if closestCluster, _ := Near(p, mean, distanceFunction); closestCluster != p.ClusterNumber {
-				changes++
-				data[ii].ClusterNumber = closestCluster
-			}
+
+		//muti-thread 分派任务2
+		go kmeansWorker2(data[0:last], mean, done)
+		for i := 0; i < workers-1; i++ {
+			go kmeansWorker2(data[last+i*tasksNum:last+(i+1)*tasksNum], mean, done)
+		}
+		for i := workers; i > 0; {
+			<-done
+			i--
+		}
+		//for ii, p := range data {
+		//	if closestCluster, _ := Near(p, mean, distanceFunction); closestCluster != p.ClusterNumber {
+		//		changes++
+		//		data[ii].ClusterNumber = closestCluster
+		//	}
+		//}
+
+		progressChartCnt++
+		if progressChartCnt >= progressChartStp {
+			fmt.Print("=")
+			progressChartCnt = 0
 		}
 		counter++
-		if changes == 0 || counter > threshold {
+		if counter > threshold {
+			fmt.Println("# done")
 			return data, mean
 		}
 	}
