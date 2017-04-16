@@ -1,11 +1,10 @@
 package kmeans
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
-
-	"bishe/go/util"
-	"fmt"
+	"runtime"
 	"sync"
 )
 
@@ -23,7 +22,8 @@ type ClusteredObservation struct {
 // DistanceFunction To compute the distanfe between observations
 type DistanceFunction func(first, second Observation) (float64, error)
 
-func (observation Observation) magnitude() float64 {
+//Magnitude 模
+func (observation Observation) Magnitude() float64 {
 	total := 0.0
 	for _, v := range observation {
 		total = total + math.Pow(v, 2)
@@ -31,15 +31,15 @@ func (observation Observation) magnitude() float64 {
 	return math.Sqrt(total)
 }
 
-// Summation of two vectors
-func (observation Observation) add(otherObservation Observation) {
+//Add Summation of two vectors
+func (observation Observation) Add(otherObservation Observation) {
 	for ii, jj := range otherObservation {
 		observation[ii] += jj
 	}
 }
 
-// multiplication of a vector with a scalar
-func (observation Observation) mul(scalar float64) {
+//Mul Multiplication of a vector with a scalar
+func (observation Observation) Mul(scalar float64) {
 	for ii := range observation {
 		observation[ii] *= scalar
 	}
@@ -94,7 +94,7 @@ func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction Di
 	mLen := make([]int, len(mean))
 
 	//muti-thread init
-	workers := util.Config.Workers
+	workers := runtime.NumCPU()
 	tasksNum := len(data) / (workers - 1)
 	last := len(data) % (workers - 1)
 	meanLockers := make([]sync.Mutex, len(mean))
@@ -116,12 +116,12 @@ func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction Di
 			i--
 		}
 		//for _, p := range data {
-		//  mean[p.ClusterNumber].add(p.Observation)
+		//  mean[p.ClusterNumber].Add(p.Observation)
 		//	mLen[p.ClusterNumber]++
 		//}
 
 		for ii := range mean {
-			mean[ii].mul(1 / float64(mLen[ii]))
+			mean[ii].Mul(1 / float64(mLen[ii]))
 		}
 
 		//muti-thread 分派任务2
@@ -154,16 +154,15 @@ func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction Di
 }
 
 // Kmeans Algorithm with smart seeds as known as K-Means ++
-func Kmeans(rawData util.VectorModel, k int, distanceFunction DistanceFunction, threshold int) ([][]int, []Observation) {
+func Kmeans(rawData []Observation, k int, distanceFunction DistanceFunction, threshold int) ([][]int, []Observation) {
 	data := make([]ClusteredObservation, len(rawData))
 	for ii, jj := range rawData {
-		data[ii].Observation = jj.V
+		data[ii].Observation = jj
 	}
 	seeds := seed(data, k, distanceFunction)
 	clusteredData, means := kmeans(data, seeds, distanceFunction, threshold)
 	label := make([][]int, k)
 	for ii, jj := range clusteredData {
-		rawData[ii].ClusterNum = jj.ClusterNumber
 		label[jj.ClusterNumber] = append(label[jj.ClusterNumber], ii)
 	}
 	return label, means

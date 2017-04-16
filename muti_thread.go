@@ -8,7 +8,7 @@ func kmeansWorker1(data []ClusteredObservation, mean []Observation, mLen []int, 
 	for _, v := range data {
 		num := v.ClusterNumber
 		meanLockers[num].Lock()
-		mean[num].add(v.Observation)
+		mean[num].Add(v.Observation)
 		mLen[num]++
 		meanLockers[num].Unlock()
 	}
