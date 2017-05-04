@@ -95,10 +95,10 @@ func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction Di
 
 	//muti-thread init
 	workers := runtime.NumCPU()
-	tasksNum := len(data) / (workers - 1)
-	last := len(data) % (workers - 1)
+	tasksNum := len(data) / workers
+	last := len(data) % workers
 	meanLockers := make([]sync.Mutex, len(mean))
-	done := make(chan bool, workers)
+	done := make(chan bool, workers+1)
 
 	for {
 		for ii := range mean {
@@ -107,11 +107,15 @@ func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction Di
 		}
 
 		//muti-thread 分派任务1
-		go kmeansWorker1(data[0:last], mean, mLen, meanLockers, done)
-		for i := 0; i < workers-1; i++ {
+		if last != 0 {
+			go kmeansWorker1(data[0:last], mean, mLen, meanLockers, done)
+		} else {
+			done <- true
+		}
+		for i := 0; i < workers; i++ {
 			go kmeansWorker1(data[last+i*tasksNum:last+(i+1)*tasksNum], mean, mLen, meanLockers, done)
 		}
-		for i := workers; i > 0; {
+		for i := workers + 1; i > 0; {
 			<-done
 			i--
 		}
@@ -125,11 +129,15 @@ func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction Di
 		}
 
 		//muti-thread 分派任务2
-		go kmeansWorker2(data[0:last], mean, done)
-		for i := 0; i < workers-1; i++ {
+		if last != 0 {
+			go kmeansWorker2(data[0:last], mean, done)
+		} else {
+			done <- true
+		}
+		for i := 0; i < workers; i++ {
 			go kmeansWorker2(data[last+i*tasksNum:last+(i+1)*tasksNum], mean, done)
 		}
-		for i := workers; i > 0; {
+		for i := workers + 1; i > 0; {
 			<-done
 			i--
 		}
