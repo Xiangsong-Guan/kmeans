@@ -1,16 +1,17 @@
 package kmeans
 
 import (
-	"fmt"
 	"math"
 	"math/rand"
 	"runtime"
 	"sync"
+
+	"gopkg.in/cheggaaa/pb.v1"
 )
 
 // Observation Data Abstraction for an N-dimensional
 // observation
-type Observation map[string]float64
+type Observation map[int]float64
 
 // ClusteredObservation Abstracts the Observation with a cluster number
 // Update and computeation becomes more efficient
@@ -20,7 +21,7 @@ type ClusteredObservation struct {
 }
 
 // DistanceFunction To compute the distanfe between observations
-type DistanceFunction func(first, second Observation) (float64, error)
+type DistanceFunction func(first, second Observation) float64
 
 //Magnitude 模
 func (observation Observation) Magnitude() float64 {
@@ -49,9 +50,9 @@ func (observation Observation) Mul(scalar float64) {
 // Index of observation, distance
 func Near(p ClusteredObservation, mean []Observation, distanceFunction DistanceFunction) (int, float64) {
 	indexOfCluster := 0
-	minSquaredDistance, _ := distanceFunction(p.Observation, mean[0])
+	minSquaredDistance := distanceFunction(p.Observation, mean[0])
 	for i := 1; i < len(mean); i++ {
-		squaredDistance, _ := distanceFunction(p.Observation, mean[i])
+		squaredDistance := distanceFunction(p.Observation, mean[i])
 		if squaredDistance < minSquaredDistance {
 			minSquaredDistance = squaredDistance
 			indexOfCluster = i
@@ -84,8 +85,6 @@ func seed(data []ClusteredObservation, k int, distanceFunction DistanceFunction)
 
 // K-Means Algorithm
 func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction DistanceFunction, threshold int) ([]ClusteredObservation, []Observation) {
-	progressChartCnt := 0
-	progressChartStp := threshold / 50
 	counter := 0
 	for ii, jj := range data {
 		closestCluster, _ := Near(jj, mean, distanceFunction)
@@ -99,6 +98,10 @@ func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction Di
 	last := len(data) % workers
 	meanLockers := make([]sync.Mutex, len(mean))
 	done := make(chan bool, workers+1)
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	//new bar
+	bar := pb.StartNew(threshold)
 
 	for {
 		for ii := range mean {
@@ -129,16 +132,19 @@ func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction Di
 		}
 
 		//muti-thread 分派任务2
+		changes := 0
 		if last != 0 {
 			go kmeansWorker2(data[0:last], mean, done)
 		} else {
-			done <- true
+			done <- false
 		}
 		for i := 0; i < workers; i++ {
 			go kmeansWorker2(data[last+i*tasksNum:last+(i+1)*tasksNum], mean, done)
 		}
 		for i := workers + 1; i > 0; {
-			<-done
+			if res := <-done; !res {
+				changes++
+			}
 			i--
 		}
 		//for ii, p := range data {
@@ -148,16 +154,12 @@ func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction Di
 		//	}
 		//}
 
-		progressChartCnt++
-		if progressChartCnt >= progressChartStp {
-			fmt.Print("=")
-			progressChartCnt = 0
-		}
 		counter++
-		if counter > threshold {
-			fmt.Println("# done")
+		if (changes == (workers + 1)) || (counter > threshold) {
+			bar.Finish()
 			return data, mean
 		}
+		bar.Increment()
 	}
 }
 

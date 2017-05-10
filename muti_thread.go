@@ -16,10 +16,16 @@ func kmeansWorker1(data []ClusteredObservation, mean []Observation, mLen []int, 
 }
 
 func kmeansWorker2(data []ClusteredObservation, mean []Observation, done chan<- bool) {
+	changes := 0
 	for i, v := range data {
 		if closestCluster, _ := Near(v, mean, Cosine); closestCluster != v.ClusterNumber {
 			data[i].ClusterNumber = closestCluster
+			changes++
 		}
 	}
-	done <- true
+	if changes > 0 {
+		done <- true
+	} else {
+		done <- false
+	}
 }
