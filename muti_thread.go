@@ -18,7 +18,7 @@ func kmeansWorker1(data []ClusteredObservation, mean []Observation, mLen []int, 
 func kmeansWorker2(data []ClusteredObservation, mean []Observation, done chan<- int) {
 	changes := 0
 	for i, v := range data {
-		if closestCluster, _ := Near(v, mean, Cosine); closestCluster != v.ClusterNumber {
+		if closestCluster, _ := Near(v, mean, EuclideanDistance); closestCluster != v.ClusterNumber {
 			data[i].ClusterNumber = closestCluster
 			changes++
 		}

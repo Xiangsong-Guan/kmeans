@@ -5,14 +5,11 @@ import (
 	"math/rand"
 	"runtime"
 	"sync"
-	"time"
-
-	"gopkg.in/cheggaaa/pb.v1"
 )
 
 // Observation Data Abstraction for an N-dimensional
 // observation
-type Observation map[int]float64
+type Observation []float64
 
 // ClusteredObservation Abstracts the Observation with a cluster number
 // Update and computeation becomes more efficient
@@ -85,9 +82,9 @@ func seed(data []ClusteredObservation, k int, distanceFunction DistanceFunction)
 }
 
 // K-Means Algorithm
-func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction DistanceFunction, threshold int) ([]ClusteredObservation, []Observation) {
+func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction DistanceFunction, threshold int) []ClusteredObservation {
 	minChanges := len(data) / 100
-	counter := 0
+	counter := 1
 	for ii, jj := range data {
 		closestCluster, _ := Near(jj, mean, distanceFunction)
 		data[ii].ClusterNumber = closestCluster
@@ -102,19 +99,9 @@ func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction Di
 	done := make(chan int, workers+1)
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	//new bar
-	bar := pb.New(threshold)
-	bar.SetRefreshRate(time.Second)
-	bar.ShowPercent = true
-	bar.ShowBar = true
-	bar.ShowCounters = true
-	bar.ShowTimeLeft = true
-	bar.ShowSpeed = true
-	bar.Start()
-
-	for {
+	for n := len(data[0].Observation); ; {
 		for ii := range mean {
-			mean[ii] = make(Observation)
+			mean[ii] = make(Observation, n)
 			mLen[ii] = 0
 		}
 
@@ -164,24 +151,22 @@ func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction Di
 
 		counter++
 		if (changes < minChanges) || (counter > threshold) {
-			bar.Finish()
-			return data, mean
+			return data
 		}
-		bar.Increment()
 	}
 }
 
 // Kmeans Algorithm with smart seeds as known as K-Means ++
-func Kmeans(rawData []Observation, k int, distanceFunction DistanceFunction, threshold int) ([][]int, []Observation) {
+func Kmeans(rawData [][]float64, k int, distanceFunction DistanceFunction, threshold int) []int {
 	data := make([]ClusteredObservation, len(rawData))
 	for ii, jj := range rawData {
 		data[ii].Observation = jj
 	}
 	seeds := seed(data, k, distanceFunction)
-	clusteredData, means := kmeans(data, seeds, distanceFunction, threshold)
-	label := make([][]int, k)
+	clusteredData := kmeans(data, seeds, distanceFunction, threshold)
+	labels := make([]int, len(clusteredData))
 	for ii, jj := range clusteredData {
-		label[jj.ClusterNumber] = append(label[jj.ClusterNumber], ii)
+		labels[ii] = jj.ClusterNumber
 	}
-	return label, means
+	return labels
 }
