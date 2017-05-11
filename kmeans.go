@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"runtime"
 	"sync"
+	"time"
 
 	"gopkg.in/cheggaaa/pb.v1"
 )
@@ -85,6 +86,7 @@ func seed(data []ClusteredObservation, k int, distanceFunction DistanceFunction)
 
 // K-Means Algorithm
 func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction DistanceFunction, threshold int) ([]ClusteredObservation, []Observation) {
+	minChanges := len(data) / 100
 	counter := 0
 	for ii, jj := range data {
 		closestCluster, _ := Near(jj, mean, distanceFunction)
@@ -97,11 +99,18 @@ func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction Di
 	tasksNum := len(data) / workers
 	last := len(data) % workers
 	meanLockers := make([]sync.Mutex, len(mean))
-	done := make(chan bool, workers+1)
+	done := make(chan int, workers+1)
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	//new bar
-	bar := pb.StartNew(threshold)
+	bar := pb.New(threshold)
+	bar.SetRefreshRate(time.Second)
+	bar.ShowPercent = true
+	bar.ShowBar = true
+	bar.ShowCounters = true
+	bar.ShowTimeLeft = true
+	bar.ShowSpeed = true
+	bar.Start()
 
 	for {
 		for ii := range mean {
@@ -113,7 +122,7 @@ func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction Di
 		if last != 0 {
 			go kmeansWorker1(data[0:last], mean, mLen, meanLockers, done)
 		} else {
-			done <- true
+			done <- 0
 		}
 		for i := 0; i < workers; i++ {
 			go kmeansWorker1(data[last+i*tasksNum:last+(i+1)*tasksNum], mean, mLen, meanLockers, done)
@@ -136,15 +145,14 @@ func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction Di
 		if last != 0 {
 			go kmeansWorker2(data[0:last], mean, done)
 		} else {
-			done <- false
+			done <- 0
 		}
 		for i := 0; i < workers; i++ {
 			go kmeansWorker2(data[last+i*tasksNum:last+(i+1)*tasksNum], mean, done)
 		}
 		for i := workers + 1; i > 0; {
-			if res := <-done; !res {
-				changes++
-			}
+			res := <-done
+			changes = changes + res
 			i--
 		}
 		//for ii, p := range data {
@@ -155,7 +163,7 @@ func kmeans(data []ClusteredObservation, mean []Observation, distanceFunction Di
 		//}
 
 		counter++
-		if (changes == (workers + 1)) || (counter > threshold) {
+		if (changes < minChanges) || (counter > threshold) {
 			bar.Finish()
 			return data, mean
 		}
